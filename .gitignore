@@ -1,0 +1,16 @@
+remote_server/.pio/
+remote_server/.vsc/
+
+
+.vscode/
+.history/
+*.log
+
+
+hid_client/.pytest_cache/
+__pycache__/
+*.pyc
+
+
+.DS_Store
+Thumbs.db
