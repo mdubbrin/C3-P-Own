@@ -1,16 +1,24 @@
-remote_server/.pio/
+# PlatformIO build artifacts
+.pio/
 remote_server/.vsc/
 
-
+# Editor/IDE
 .vscode/
 .history/
+.claude/
+
+# Logs
 *.log
 
-
+# Python artifacts
 hid_client/.pytest_cache/
 __pycache__/
 *.pyc
 
-
+# OS
 .DS_Store
 Thumbs.db
+
+# Tunnel/proxy binaries
+ngrok*
+playit
